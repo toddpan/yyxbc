@@ -16,17 +16,23 @@ esp8266+红外模块，实现遥控器功能
 3、Nodemcu(826612f) *1  
 4、面包板*1  
 5、杜邦线*4根  
+![硬件设备](https://github.com/toddpan/yyxbc/blob/master/arduino/images/blinkerir1.png) 
+
 
 接线：  
-红外发射模块	NodeMcu  
-IN	---------> D2  
-+5V	--------->+5v  
-GND	--------->G  
-红外接入模块	NodeMcu  
-DAT	--------->D5  
-VCC	--------->+5v  
-GND	---------> G  
+表头  | 表头  
+---- | ----- 
+红外发射模块|	NodeMcu  
+IN	| D2  
++5V	|+5v  
+GND	|G  
+红外接入模块|	NodeMcu  
+DAT	|D5  
+VCC	|+5v  
+GND	|G  
 
+![接线图](https://github.com/toddpan/yyxbc/blob/master/arduino/images/blinkerir2.png) 
+![接线图](https://github.com/toddpan/yyxbc/blob/master/arduino/images/blinkerir3.png) 
 
 表头  | 表头  | 表头
 ---- | ----- | ------ 
