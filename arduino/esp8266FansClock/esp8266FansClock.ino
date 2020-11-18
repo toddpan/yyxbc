@@ -52,8 +52,8 @@ U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0,/* clock=*/ 14, /* data=*/ 2, /
 
 
 //---------------修改此处""内的信息---------------------------------------------
-//const char ssid[] = "panzujiMi10";    //WiFi名
-const char ssid[] = "Xiaomi_10EE";    //WiFi名
+const char ssid[] = "panzujiMi10";    //WiFi名
+//const char ssid[] = "Xiaomi_10EE";    //WiFi名
 const char pass[] = "moto1984";       //WiFi密码
 
 //String sec_uid= "MS4wLjABAAAAFauf0z7gfzJVLTD6_q835WnGnLOJ47bmWR5NKu5dHQg";
