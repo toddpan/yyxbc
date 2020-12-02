@@ -258,8 +258,6 @@ int headerQuantity = httpClient.headers();
   -9： HTTPC_ERROR_ENCODING
   -10： HTTPC_ERROR_STREAM_WRITE
   -11： HTTPC_ERROR_READ_TIMEOUT
-
-位置导航: ESP8266库 / 本页
  * 
  */ 
 
