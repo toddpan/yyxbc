@@ -10,6 +10,6 @@
     2.接入blinker平台，通过手机可以远程控制。  
     3.接入小爱同学、小度和天猫精灵，可以动动嘴就能控制你的家用电器。  
     4.带红外学习功能，只要用遥控器的电器设备都可以接入。  
-2、arduino/wificar
+3、arduino/wificar
   nodemcu(esp8266-12e) + L298N 电机驱动板 ，wifi遥控小车，app inventor  
  开发的手机app wifi遥控器。
