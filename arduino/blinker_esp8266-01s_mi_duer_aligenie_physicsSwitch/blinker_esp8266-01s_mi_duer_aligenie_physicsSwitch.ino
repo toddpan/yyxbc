@@ -72,12 +72,12 @@ String version  = "1.0.4";
 
 //Esp-01/01s，继电器接GPIO0,物理开关接GPIO2
 //
-//#define LED_BUILTIN_LIGHT 0
-//#define LED_BUILTIN_K2 2
+#define LED_BUILTIN_LIGHT 0
+#define LED_BUILTIN_K2 2
 
-//NodeMCU 继电器接D3,物理开关接D4
-#define LED_BUILTIN_LIGHT D3
-#define LED_BUILTIN_K2 D4
+////NodeMCU 继电器接D3,物理开关接D4
+//#define LED_BUILTIN_LIGHT D3
+//#define LED_BUILTIN_K2 D4
 
 /***
  * 继电器高电平触发时，YYXBC_HIGH = 1，YYXBC_LOW  = 0
