@@ -54,8 +54,15 @@ This example code is in the public domain.
 ////如果要使用smartconfig配网模式，打开注释掉，加让这行代码生效
 //#define BLINKER_ESP_SMARTCONFIG
 
+//支持阳阳学编程的web wifi配网
+#define YYXBC_WEBCONFIG
+
 #include <Blinker.h>
 #include <ESP8266WebServer.h>
+
+#if (defined(YYXBC_WEBCONFIG))
+  #include "wificfg.h"
+#endif
 
 char auth[] = "a7a437131912";
 char ssid[] = "panzujiMi10";
@@ -63,13 +70,14 @@ char pswd[] = "moto1984";
 
 String version  = "1.0.4";
 
-//NodeMCU 继电器接D3,物理开关接D4
-#define LED_BUILTIN_LIGHT 0
-#define LED_BUILTIN_K2 2
-
 //Esp-01/01s，继电器接GPIO0,物理开关接GPIO2
-//#define LED_BUILTIN_LIGHT D3
-//#define LED_BUILTIN_K2 D4
+//
+//#define LED_BUILTIN_LIGHT 0
+//#define LED_BUILTIN_K2 2
+
+//NodeMCU 继电器接D3,物理开关接D4
+#define LED_BUILTIN_LIGHT D3
+#define LED_BUILTIN_K2 D4
 
 /***
  * 继电器高电平触发时，YYXBC_HIGH = 1，YYXBC_LOW  = 0
@@ -81,7 +89,7 @@ const int YYXBC_LOW  = 1 ;
 /***
  * 物理开关点动模式1，自锁模式0
  */
-const int YYXBC_BUTTON_TYPE = 1;
+const int YYXBC_BUTTON_TYPE = 0;
 
 //http接口请求密码
 String httppswd = "123456";
@@ -95,6 +103,9 @@ BlinkerButton Button1("btn-abc");
 
 //webserver for siri
 static ESP8266WebServer esp8266_server(80);
+
+//是否处理联网状态
+bool isNetConnected(){return (WiFi.status() == WL_CONNECTED);}
 
 //心跳回调
 void heartbeat()
@@ -117,7 +128,7 @@ void button1_callback(const String & state)
 
     if (state == BLINKER_CMD_ON) {
         BLINKER_LOG("Toggle on!");
-        Button1.print("on");
+        if(isNetConnected())Button1.print("on");
         digitalWrite(LED_BUILTIN_LIGHT, YYXBC_HIGH);
         oDuerState = YYXBC_HIGH;
         oMioState =YYXBC_HIGH;
@@ -125,18 +136,21 @@ void button1_callback(const String & state)
     }
     else if (state == BLINKER_CMD_OFF) {
         BLINKER_LOG("Toggle off!");
-        Button1.print("off");
+        if(isNetConnected())Button1.print("off");
         digitalWrite(LED_BUILTIN_LIGHT, YYXBC_LOW);
         oDuerState = YYXBC_LOW;
         oMioState = YYXBC_LOW;
         oAligenieState = YYXBC_LOW;
     }
-    BlinkerDuerOS.powerState(oDuerState == YYXBC_HIGH ? "on" : "off");
-    BlinkerDuerOS.report();
-    BlinkerMIOT.powerState(oMioState == YYXBC_HIGH ? "on" : "off");
-    BlinkerMIOT.print();
-    BlinkerAliGenie.powerState(oAligenieState == YYXBC_HIGH ? "on" : "off");
-    BlinkerAliGenie.print(); 
+    
+    if(isNetConnected()){
+      BlinkerDuerOS.powerState(oDuerState == YYXBC_HIGH ? "on" : "off");
+      BlinkerDuerOS.report();
+      BlinkerMIOT.powerState(oMioState == YYXBC_HIGH ? "on" : "off");
+      BlinkerMIOT.print();
+      BlinkerAliGenie.powerState(oAligenieState == YYXBC_HIGH ? "on" : "off");
+      BlinkerAliGenie.print(); 
+    }
 }
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -252,11 +266,11 @@ void aligenieQuery(int32_t queryCode)
 void dataRead(const String & data){
   BLINKER_LOG("Blinker readString: ", data);
 
-  Blinker.vibrate();
-  
-  uint32_t BlinkerTime = millis();
-  
-  Blinker.print("millis", BlinkerTime);
+//  Blinker.vibrate();
+//  
+//  uint32_t BlinkerTime = millis();
+//  
+//  Blinker.print("millis", BlinkerTime);
 
 }
 
@@ -278,16 +292,22 @@ void setup() {
     
     pinMode(LED_BUILTIN_K2, OUTPUT);
 //    digitalWrite(LED_BUILTIN_K2, LOW);
-    
- #if (defined(BLINKER_APCONFIG)) || (defined(BLINKER_ESP_SMARTCONFIG))
-     //启动配网模式用这行代码
-    Blinker.begin(auth);
- #else 
-    Blinker.begin(auth, ssid, pswd);
- #endif
+
+ #if (defined(YYXBC_WEBCONFIG))
+    //wifi 配网
+    WIFI_Init();
+    Settings& cfg = getSettings();
+    Blinker.begin(cfg.auth.c_str(),WiFi.SSID().c_str(),WiFi.psk().c_str());
+ #else
+    #if (defined(BLINKER_APCONFIG)) || (defined(BLINKER_ESP_SMARTCONFIG))
+       //启动配网模式用这行代码
+      Blinker.begin(auth);
+   #else
+      Blinker.begin(auth, ssid, pswd);
+   #endif
+ #endif  
 
     Blinker.attachData(dataRead);
-
     BlinkerDuerOS.attachPowerState(duerPowerState); //小度语音操作注册函数
     BlinkerDuerOS.attachQuery(duerQuery);
 
@@ -312,8 +332,8 @@ void setup() {
 
 void loop() {
 
-    static int lastms = 0;
-    if (millis()-lastms > 10000) {
+    static int lastms = millis();
+    if (millis()-lastms > 30000) {
       lastms = millis();
       Serial.printf(PSTR("Running (%s),state(%s),version %s for %d Free mem=%d\n"),
           WiFi.localIP().toString().c_str(),
@@ -325,12 +345,37 @@ void loop() {
     esp8266_server.handleClient();// 处理http服务器访问
     
     //检查物理开关状态
+    bool bret = false;
     if(YYXBC_BUTTON_TYPE == 1){
-       btnHandler1();
+       bret = btnHandler1();
     }else{
-       btnHandler2();
+       bret = btnHandler2();
     }
-   
+    
+   /*
+    *连续5次开关，时间5秒内，认为是要进入配网模式，重启进入配网模式
+    */
+    #if (defined(YYXBC_WEBCONFIG))
+      //物理开关开、关次数，1秒内计入
+      static int physics_count  = 0;
+      static int lastphysicsms = 0;
+      if(bret ){
+        Serial.println("物理开关被触发");
+        Serial.println(millis()-lastphysicsms);
+        if (millis()-lastphysicsms < 2000) {
+          
+          Serial.println(physics_count);
+          Serial.print("/5物理开关触发配网模式...");
+          physics_count++;
+        }
+        lastphysicsms = millis();
+      }
+      //进入配网模式，重启esp8266
+      if(physics_count >= 4){
+          Serial.println("正在重启esp8266，启动后进入配网模式...");
+          WIFI_RestartToCfg();
+      } 
+    #endif
 }
 
 
@@ -409,14 +454,14 @@ void handleNotFound(){
 }
 
 //点动模式按钮，监听按钮状态，执行相应处理
-void btnHandler1()
+bool btnHandler1()
 {
   static bool oButtonState = false;
   int state1 =  digitalRead(LED_BUILTIN_K2); //按钮状态
   int state2 =  digitalRead(LED_BUILTIN_LIGHT); //灯的状态
   if(state1 == HIGH )
   {
-    if(oButtonState ){
+    if(oButtonState){
       if(state2 == YYXBC_HIGH )
       { 
         button1_callback(BLINKER_CMD_OFF);
@@ -426,16 +471,19 @@ void btnHandler1()
         Serial.println("按钮对灯已执行打开");
       }
       oButtonState = false;
+      return true;
     }
+    
   }else{
-    oButtonState = true;
+      oButtonState = true;
   }
+  
+
+  return false;
 }
 
-
-
 //自锁模式按钮，监听按钮状态，执行相应处理
-void btnHandler2()
+bool btnHandler2()
 {
  static bool is_btn = false;//按钮的标志位，用来逻辑处理对比，判断按钮有没有改变状态
   bool is = digitalRead(LED_BUILTIN_K2);   //按钮状态
@@ -454,5 +502,7 @@ void btnHandler2()
       Serial.println("按钮对灯已执行打开");
     }
     is_btn = digitalRead(LED_BUILTIN_K2);  //更新按钮状态
+    return true;
   }
+ return false;
 }
