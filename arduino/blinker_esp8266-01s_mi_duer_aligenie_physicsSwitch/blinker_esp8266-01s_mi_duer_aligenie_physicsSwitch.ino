@@ -55,7 +55,7 @@ This example code is in the public domain.
 //#define BLINKER_ESP_SMARTCONFIG
 
 //支持阳阳学编程的web wifi配网
-#define YYXBC_WEBCONFIG
+//#define YYXBC_WEBCONFIG
 
 #include <Blinker.h>
 #include <ESP8266WebServer.h>
