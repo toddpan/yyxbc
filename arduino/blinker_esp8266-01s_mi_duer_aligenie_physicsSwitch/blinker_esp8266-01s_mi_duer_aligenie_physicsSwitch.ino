@@ -12,6 +12,8 @@ www.sooncore.com
 固件有网页配网功能，固件烧写工具：
 链接:https://pan.baidu.com/s/1WsE_2gERyjaUZFbwgJnsOw 提取码:56r8 
 
+B站视频：https://b23.tv/O1ZdE9
+
 说明：
 
 1，继电器高电平触发时，YYXBC_HIGH = 1，YYXBC_LOW  = 0
@@ -71,7 +73,6 @@ char pswd[] = "moto1984";
 String version  = "1.0.4";
 
 //Esp-01/01s，继电器接GPIO0,物理开关接GPIO2
-//
 #define LED_BUILTIN_LIGHT 0
 #define LED_BUILTIN_K2 2
 
@@ -485,7 +486,7 @@ bool btnHandler1()
 //自锁模式按钮，监听按钮状态，执行相应处理
 bool btnHandler2()
 {
- static bool is_btn = false;//按钮的标志位，用来逻辑处理对比，判断按钮有没有改变状态
+  static bool is_btn = digitalRead(LED_BUILTIN_K2);//按钮的标志位，用来逻辑处理对比，判断按钮有没有改变状态
   bool is = digitalRead(LED_BUILTIN_K2);   //按钮状态
   if ( is != is_btn)
   {
