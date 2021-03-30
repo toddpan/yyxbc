@@ -56,7 +56,7 @@ This example code is in the public domain.
 ////如果要使用smartconfig配网模式，打开注释掉，加让这行代码生效
 //#define BLINKER_ESP_SMARTCONFIG
 
-//支持阳阳学编程的web wifi配网
+//支持阳阳学编程的web wifi配网，暂时不开源
 //#define YYXBC_WEBCONFIG
 
 #include <Blinker.h>
@@ -66,11 +66,13 @@ This example code is in the public domain.
   #include "wificfg.h"
 #endif
 
+#include <ArduinoOTA.h>
+
 char auth[] = "a7a437131912";
 char ssid[] = "panzujiMi10";
 char pswd[] = "moto1984";
 
-String version  = "1.0.4";
+String version  = "1.0.5";
 
 //Esp-01/01s，继电器接GPIO0,物理开关接GPIO2
 #define LED_BUILTIN_LIGHT 0
@@ -329,6 +331,9 @@ void setup() {
     esp8266_server.begin();                  
       
     Serial.println("HTTP esp8266_server started");
+
+    ArduinoOTA.begin();
+    Serial.println("ArduinoOTA service started");
 }
 
 void loop() {
@@ -356,27 +361,38 @@ void loop() {
    /*
     *连续5次开关，时间5秒内，认为是要进入配网模式，重启进入配网模式
     */
-    #if (defined(YYXBC_WEBCONFIG))
-      //物理开关开、关次数，1秒内计入
-      static int physics_count  = 0;
-      static int lastphysicsms = 0;
-      if(bret ){
-        Serial.println("物理开关被触发");
-        Serial.println(millis()-lastphysicsms);
-        if (millis()-lastphysicsms < 2000) {
-          
-          Serial.println(physics_count);
-          Serial.print("/5物理开关触发配网模式...");
-          physics_count++;
-        }
-        lastphysicsms = millis();
+    //物理开关开、关次数，1秒内计入
+    static int physics_count  = 0;
+    static int lastphysicsms = 0;
+    if(bret ){
+      Serial.println("物理开关被触发");
+      Serial.println(millis()-lastphysicsms);
+      if (millis()-lastphysicsms < 2000) {
+        
+        Serial.println(physics_count);
+        Serial.print("/5物理开关触发配网模式...");
+        physics_count++;
+      }else{
+        physics_count = 0;  
       }
-      //进入配网模式，重启esp8266
-      if(physics_count >= 4){
-          Serial.println("正在重启esp8266，启动后进入配网模式...");
-          WIFI_RestartToCfg();
-      } 
-    #endif
+      lastphysicsms = millis();
+    }
+    //进入配网模式，重启esp8266
+    if(physics_count >= 4){
+        Serial.println("正在重启esp8266，启动后进入配网模式...");
+       #if (defined(YYXBC_WEBCONFIG))
+        WIFI_RestartToCfg();
+       #else
+       ESP.restart();
+      #endif
+    } 
+
+    /*
+    *检查请求
+    */
+
+    ArduinoOTA.handle();
+    
 }
 
 
