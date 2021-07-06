@@ -5,17 +5,8 @@ NodeMcu或esp-01/01s控制1路继电器，集成blinker平台，
 v1.0
 Created 2021
 by 阳阳学编程
-www.sooncore.com
-抖音号：yyxbc2010
-微信号：yyxbc2010
-
-固件有网页配网功能，固件烧写工具：
-链接:https://pan.baidu.com/s/1WsE_2gERyjaUZFbwgJnsOw 提取码:56r8 
-
-B站视频：https://b23.tv/O1ZdE9
 
 说明：
-
 1，继电器高电平触发时，YYXBC_HIGH = 1，YYXBC_LOW  = 0
 继电器低电平触发时，YYXBC_HIGH = 0，YYXBC_LOW  = 1
 const int YYXBC_HIGH = 0 ;
@@ -49,6 +40,7 @@ This example code is in the public domain.
 
 #define BLINKER_WITHOUT_SSL              //使用这个宏，表示不用SSL加密，可以得到更多内存
 
+
 //
 ////如果要使用apconfig配网模式，打开注释掉，加让这行代码生效
 //#define BLINKER_APCONFIG
@@ -57,26 +49,54 @@ This example code is in the public domain.
 //#define BLINKER_ESP_SMARTCONFIG
 
 //支持阳阳学编程的web wifi配网，暂时不开源
-//#define YYXBC_WEBCONFIG
+#define YYXBC_WEBCONFIG
+
+
+//支持433自锁开关功能，需要用蜂鸟无线公司出的远-R1 433模块，
+//将R1的VCC和GND分别接在esp-01s的VCC和GND上，两个DAT引脚的随意一个接在esp-01s的RX上
+#define YYXBC_WITH_433
 
 #include <Blinker.h>
 #include <ESP8266WebServer.h>
+
+//依赖库 LinkedList
+//https://github.com/ivanseidel/LinkedList
+#include <LinkedList.h>
 
 #if (defined(YYXBC_WEBCONFIG))
   #include "wificfg.h"
 #endif
 
-#include <ArduinoOTA.h>
+
+#if (defined(YYXBC_WITH_433))
+  #include <LittleFS.h>
+  #include <FS.h>
+  #include <RCSwitch.h>
+  RCSwitch mySwitch = RCSwitch();
+  //433指令数据格式
+  struct RawData{
+    uint16_t bits;
+    uint16_t protocol;
+    long unsigned data;
+    RawData():protocol(0),data(0){}
+    
+  };
+//433指令列表
+LinkedList<RawData*> mySwitchList;
+#define MYFS LittleFS
+#endif
 
 char auth[] = "a7a437131912";
 char ssid[] = "panzujiMi10";
 char pswd[] = "moto1984";
 
-String version  = "1.0.5";
+String version  = "1.0.6";
 
 //Esp-01/01s，继电器接GPIO0,物理开关接GPIO2
 #define LED_BUILTIN_LIGHT 0
 #define LED_BUILTIN_K2 2
+#define LED_BUILTIN_K3 3
+#define LED_BUILTIN_KED 2
 
 ////NodeMCU 继电器接D3,物理开关接D4
 //#define LED_BUILTIN_LIGHT D3
@@ -92,7 +112,7 @@ const int YYXBC_LOW  = 1 ;
 /***
  * 物理开关点动模式1，自锁模式0
  */
-const int YYXBC_BUTTON_TYPE = 0;
+const int YYXBC_BUTTON_TYPE = 1;
 
 //http接口请求密码
 String httppswd = "123456";
@@ -101,11 +121,15 @@ bool oDuerState = YYXBC_LOW;
 bool oMioState = YYXBC_LOW;
 bool oAligenieState = YYXBC_LOW;
 
+
 // 新建组件对象
-BlinkerButton Button1("btn-abc");
+BlinkerButton Button1("btn-abc");//注意：要和APP组件’数据键名’一致
+BlinkerText Text1("tex-abc");
+
+#define LOG_D(fmt, ...)   printf_P(PSTR(fmt "\n") , ##__VA_ARGS__);
 
 //webserver for siri
-static ESP8266WebServer esp8266_server(80);
+ESP8266WebServer* esp8266_server = NULL;
 
 //是否处理联网状态
 bool isNetConnected(){return (WiFi.status() == WL_CONNECTED);}
@@ -118,16 +142,75 @@ void heartbeat()
     //较正app的按钮状态
     if(YYXBC_HIGH == digitalRead(LED_BUILTIN_LIGHT) ){
         Button1.print("on");
+        BUILTIN_SWITCH.print("on");
+        Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+        Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
     }else{
        Button1.print("off");
+       BUILTIN_SWITCH.print("off");
+       Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+       Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
     }
 }
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// 按下BlinkerAPP按键即会执行该函数
+void switch_callback(const String & state)
+{
+    BLINKER_LOG("get switch state: ", state);
+
+    //检查配网模式
+    check_if_config(state);
+    
+    if (state == BLINKER_CMD_ON) {
+        BLINKER_LOG("Toggle on!");
+        if(isNetConnected())Button1.print("on");
+        digitalWrite(LED_BUILTIN_LIGHT, YYXBC_HIGH);
+        oDuerState = YYXBC_HIGH;
+        oMioState =YYXBC_HIGH;
+        oAligenieState = YYXBC_HIGH;
+    }
+    else if (state == BLINKER_CMD_OFF) {
+        BLINKER_LOG("Toggle off!");
+        if(isNetConnected())Button1.print("off");
+        digitalWrite(LED_BUILTIN_LIGHT, YYXBC_LOW);
+        oDuerState = YYXBC_LOW;
+        oMioState = YYXBC_LOW;
+        oAligenieState = YYXBC_LOW;
+    }
+
+    if (state == BLINKER_CMD_ON)
+    {
+      BUILTIN_SWITCH.print("on"); //发送开关当前的状态(多用于反馈开关状态)到APP
+  
+      Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+      Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
+    }
+    else
+    {
+      BUILTIN_SWITCH.print("off");
+      
+      Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+      Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
+    }
+
+    if(isNetConnected()){
+      BlinkerDuerOS.powerState(oDuerState == YYXBC_HIGH ? "on" : "off");
+      BlinkerDuerOS.report();
+      BlinkerMIOT.powerState(oMioState == YYXBC_HIGH ? "on" : "off");
+      BlinkerMIOT.print();
+      BlinkerAliGenie.powerState(oAligenieState == YYXBC_HIGH ? "on" : "off");
+      BlinkerAliGenie.print(); 
+    }
+}
+
 //*******如果是手机app 有对设备进行操作就执行下面
 
 void button1_callback(const String & state)
 {
     BLINKER_LOG("button1_callback get button state: ", state);
+
+    //检查配网模式
+    check_if_config(state);
 
     if (state == BLINKER_CMD_ON) {
         BLINKER_LOG("Toggle on!");
@@ -145,7 +228,22 @@ void button1_callback(const String & state)
         oMioState = YYXBC_LOW;
         oAligenieState = YYXBC_LOW;
     }
-    
+
+     if (state == BLINKER_CMD_ON)
+    {
+      BUILTIN_SWITCH.print("on"); //发送开关当前的状态(多用于反馈开关状态)到APP
+  
+      Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+      Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
+    }
+    else
+    {
+      BUILTIN_SWITCH.print("off");
+      
+      Text1.color(oDuerState == YYXBC_HIGH  ? "Blue" : "black");
+      Text1.print(oDuerState == YYXBC_HIGH  ? "灯状态: 开启" : "灯状态: 关闭");
+    }
+
     if(isNetConnected()){
       BlinkerDuerOS.powerState(oDuerState == YYXBC_HIGH ? "on" : "off");
       BlinkerDuerOS.report();
@@ -154,6 +252,32 @@ void button1_callback(const String & state)
       BlinkerAliGenie.powerState(oAligenieState == YYXBC_HIGH ? "on" : "off");
       BlinkerAliGenie.print(); 
     }
+}
+
+void check_if_config(const String & state)
+{
+    BLINKER_LOG("check_if_config get button state: ", state);
+
+    static long lastpresstime =millis();
+    if (state == BLINKER_CMD_BUTTON_PRESSED){
+        BLINKER_LOG("Button pressed!");
+        lastpresstime = millis();
+    }
+    else if (state == BLINKER_CMD_BUTTON_PRESSUP){
+      BLINKER_LOG("Button pressup,lastpresstime(%d)!",lastpresstime);
+      //判断是否是长按5秒
+      if(millis() - lastpresstime > 5000){
+        lastpresstime =  millis();
+          Serial.println("正在重启esp8266，启动后进入配网模式...");
+          #if (defined(YYXBC_WEBCONFIG))
+              WIFI_RestartToCfg();
+          #else
+             ESP.restart();
+          #endif
+          
+      }
+    }
+
 }
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -277,7 +401,15 @@ void dataRead(const String & data){
 
 }
 
+/////////////////////////////////////main/////////////////////////////////
+
+
+/*
+*程序入口函数
+**/
 void setup() {
+
+//   
     // 初始化串口
     Serial.begin(115200);
 
@@ -296,8 +428,17 @@ void setup() {
     pinMode(LED_BUILTIN_K2, OUTPUT);
 //    digitalWrite(LED_BUILTIN_K2, LOW);
 
+  #if(defined(YYXBC_WITH_433))
+      //load 433 configure
+    loadConfig(&MYFS);
+    pinMode(LED_BUILTIN_K3, FUNCTION_3); 
+    mySwitch.enableReceive(LED_BUILTIN_K3);
+    Serial.println("started RCSwitch");
+  #endif  
+
  #if (defined(YYXBC_WEBCONFIG))
     //wifi 配网
+    attach(loop_callback);
     WIFI_Init();
     Settings& cfg = getSettings();
     Blinker.begin(cfg.auth.c_str(),WiFi.SSID().c_str(),WiFi.psk().c_str());
@@ -321,19 +462,20 @@ void setup() {
     BlinkerAliGenie.attachQuery(aligenieQuery);     
   
     Button1.attach(button1_callback);
+    BUILTIN_SWITCH.attach(switch_callback);
+    
     //注册回调函数
     Blinker.attachHeartbeat(heartbeat);
     
     //启动webserver ,提供接口给siri用
-    esp8266_server.on("/", handleRoot); 
-    esp8266_server.on("/post", handleSetConfig);           
-    esp8266_server.onNotFound(handleNotFound);  
-    esp8266_server.begin();                  
-      
+    esp8266_server = new ESP8266WebServer(80);
+    esp8266_server->on("/", handleRoot); 
+    esp8266_server->on("/post", handleSetConfig);           
+    esp8266_server->onNotFound(handleNotFound);  
+    esp8266_server->begin();                  
     Serial.println("HTTP esp8266_server started");
+    
 
-    ArduinoOTA.begin();
-    Serial.println("ArduinoOTA service started");
 }
 
 void loop() {
@@ -348,7 +490,8 @@ void loop() {
     }
     
     Blinker.run();//运行Blinker
-    esp8266_server.handleClient();// 处理http服务器访问
+    Blinker.autoRun();
+    esp8266_server->handleClient();// 处理http服务器访问
     
     //检查物理开关状态
     bool bret = false;
@@ -357,7 +500,8 @@ void loop() {
     }else{
        bret = btnHandler2();
     }
-    
+
+
    /*
     *连续5次开关，时间5秒内，认为是要进入配网模式，重启进入配网模式
     */
@@ -368,9 +512,7 @@ void loop() {
       Serial.println("物理开关被触发");
       Serial.println(millis()-lastphysicsms);
       if (millis()-lastphysicsms < 2000) {
-        
-        Serial.println(physics_count);
-        Serial.print("/5物理开关触发配网模式...");
+        Serial.printf("%u/5物理开关触发配网模式...",physics_count);
         physics_count++;
       }else{
         physics_count = 0;  
@@ -387,11 +529,22 @@ void loop() {
       #endif
     } 
 
-    /*
-    *检查请求
-    */
-
-    ArduinoOTA.handle();
+   #if(defined(YYXBC_WITH_433))
+   if (mySwitch.available()) {
+      uint16_t bit = mySwitch.getReceivedBitlength();
+      uint16_t protocol = mySwitch.getReceivedProtocol();
+      long unsigned switchKey = mySwitch.getReceivedValue();
+      Serial.printf("Received :%u,/bit %u,Protocol %u \r\n",switchKey,bit,protocol);
+      if(bit > 0 ){
+        if( findRawData( bit, protocol,switchKey )){
+          mySwitchHandler();
+        }else{
+          Serial.println("不执行");
+        }
+      } 
+      mySwitch.resetAvailable();
+    }
+  #endif  
     
 }
 
@@ -409,31 +562,31 @@ void handleRoot() {   //处理网站根目录“/”的访问请求
       data += "</body>";
       data += "</html>";  
       
-    esp8266_server.send(200, "text/html; charset=utf-8", data);  
+    esp8266_server->send(200, "text/html; charset=utf-8", data);  
 } 
 
 
 void handleSetConfig() {   //处理来自siri的访问请求 
-  if (esp8266_server.method() != HTTP_POST) {
-    esp8266_server.send(405, "text/plain", "Method Not Allowed");
+  if (esp8266_server->method() != HTTP_POST) {
+    esp8266_server->send(405, "text/plain", "Method Not Allowed");
   } else {
 //    String message = "POST form was:\n";
     String btnName,btnState,btnPswd;
-    for (uint8_t i = 0; i < esp8266_server.args(); i++) {
-       String name = esp8266_server.argName(i);
+    for (uint8_t i = 0; i < esp8266_server->args(); i++) {
+       String name = esp8266_server->argName(i);
        if(name == "btn") {
-           btnName = esp8266_server.arg(i);
+           btnName = esp8266_server->arg(i);
        }
        else if (name == "state"){
-           btnState = esp8266_server.arg(i);
+           btnState = esp8266_server->arg(i);
        } 
        else if (name == "passwd"){
-           btnPswd = esp8266_server.arg(i);
+           btnPswd = esp8266_server->arg(i);
        }     
     }
     if(btnPswd != httppswd){
       String message = "{\"errcode\":0,\"msg\":\"password error\"}";  
-      esp8266_server.send(200, "text/html; charset=utf-8", message);  
+      esp8266_server->send(200, "text/html; charset=utf-8", message);  
       return;
     }
     if(btnName.length() >0 && btnState.length() >0) {
@@ -448,7 +601,7 @@ void handleSetConfig() {   //处理来自siri的访问请求
     
     }
     String message = "{\"errcode\":0,\"msg\":\" ok\"}";  
-    esp8266_server.send(200, "text/html; charset=utf-8", message); 
+    esp8266_server->send(200, "text/html; charset=utf-8", message); 
   }
 }
 
@@ -457,16 +610,16 @@ void handleNotFound(){
 //  digitalWrite(led, 1);
   String message = "File Not Found\n\n";
   message += "URI: ";
-  message += esp8266_server.uri();
+  message += esp8266_server->uri();
   message += "\nMethod: ";
-  message += (esp8266_server.method() == HTTP_GET) ? "GET" : "POST";
+  message += (esp8266_server->method() == HTTP_GET) ? "GET" : "POST";
   message += "\nArguments: ";
-  message += esp8266_server.args();
+  message += esp8266_server->args();
   message += "\n";
-  for (uint8_t i = 0; i < esp8266_server.args(); i++) {
-    message += " " + esp8266_server.argName(i) + ": " + esp8266_server.arg(i) + "\n";
+  for (uint8_t i = 0; i < esp8266_server->args(); i++) {
+    message += " " + esp8266_server->argName(i) + ": " + esp8266_server->arg(i) + "\n";
   }
-  esp8266_server.send(404, "text/plain", message);
+  esp8266_server->send(404, "text/plain", message);
 
 }
 
@@ -521,5 +674,190 @@ bool btnHandler2()
     is_btn = digitalRead(LED_BUILTIN_K2);  //更新按钮状态
     return true;
   }
+ return false;
+}
+
+//自锁模式按钮，监听433按钮状态，执行相应处理
+bool btnHandler3()
+{
+  static bool is_btn = digitalRead(LED_BUILTIN_K3);//按钮的标志位，用来逻辑处理对比，判断按钮有没有改变状态
+  bool is = digitalRead(LED_BUILTIN_K3);   //按钮状态
+  if ( is != is_btn)
+  {
+    bool is_led = digitalRead(LED_BUILTIN_LIGHT);
+    digitalWrite(LED_BUILTIN_LIGHT, !is_led);
+    if (is_led == YYXBC_HIGH)
+    {
+      button1_callback(BLINKER_CMD_OFF);
+      Serial.println("按钮对灯已执行关闭");
+    }
+    else
+    {
+      button1_callback(BLINKER_CMD_ON);
+      Serial.println("按钮对灯已执行打开");
+    }
+    is_btn = digitalRead(LED_BUILTIN_K3);  //更新按钮状态
+    return true;
+  }
+ return false;
+}
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+bool findRawData(uint16_t bit,uint16_t protocol,long unsigned data )
+{
+ int nSize = mySwitchList.size();
+  for(int i = 0;i< nSize ;i++){
+    RawData* pRawData = mySwitchList.get(i);
+    if(pRawData){
+      if(bit == pRawData->bits &&
+      protocol == pRawData->protocol &&
+      data == pRawData->data){
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void addRawData(uint16_t bit,uint16_t protocol,long unsigned data ){
+  if(findRawData(bit,protocol,data)){
+    Serial.println("433指令已经存在，不作处理");
+    return;
+  }
+  RawData* tempRawData_   =  new RawData();
+  tempRawData_->bits = bit;
+  tempRawData_->protocol = protocol;
+  tempRawData_->data = data;
+  mySwitchList.add(tempRawData_);
+  Serial.println("指令对码完成");
+  
+}
+
+bool saveConfig(FS *fs){
+  if (!fs->begin()) {
+    Serial.println("Unable to begin(), aborting");
+    return false;
+  }
+  Serial.println("Save file, may take a while...");
+  long start = millis();
+  File f = fs->open("/433config.bin", "w");
+  if (!f) {
+    Serial.println("Unable to open file for writing, aborting");
+    return false;
+  }
+  int nSize = mySwitchList.size();
+  int nwrite = f.write((char*)&nSize, sizeof(uint16_t));
+  // assert(nwrite != sizeof(uint16_t));
+  for(int i = 0;i< nSize ;i++){
+    RawData* pRawData = mySwitchList.get(i);
+    if(pRawData){
+      f.write((char*)&pRawData->bits, sizeof(uint16_t));
+      f.write((char*)&pRawData->protocol, sizeof(uint16_t));
+      f.write((char*)&pRawData->data, sizeof(long unsigned));
+    }
+  }
+  f.close();
+  long stop = millis();
+  Serial.printf("==> Time to write  chunks = %ld milliseconds\n", stop - start);
+  return true;
+}
+
+bool loadConfig(FS *fs){
+if (!fs->begin()) {
+    Serial.println("Unable to begin(), aborting");
+    return false;
+  }
+  Serial.println("Reading file, may take a while...");
+  long start = millis();
+  File f = fs->open("/433config.bin", "r");
+  if (!f) {
+    Serial.println("Unable to open file for reading, aborting");
+    return false;
+  }
+  int nSize = 0;
+  int nread = f.read((uint8_t*)&nSize, sizeof(uint16_t));
+  // assert(nread != sizeof(uint16_t));
+   Serial.println(nread);
+  for(int i = 0;i< nSize ;i++){
+    RawData* pRawData = new RawData();
+    if(pRawData){
+      f.read((uint8_t*)&pRawData->bits, sizeof(uint16_t));
+      f.read((uint8_t*)&pRawData->protocol, sizeof(uint16_t));
+      f.read((uint8_t*)&pRawData->data, sizeof(long unsigned));
+      Serial.printf("bit:%u,protocol:%u,data:%u \r\n",pRawData->bits,pRawData->protocol,pRawData->data);
+      mySwitchList.add(pRawData);
+    }
+  }
+  f.close();
+  long stop = millis();
+  Serial.printf("==> Time to write  chunks = %ld milliseconds\n", stop - start);
+  return true;
+}
+
+
+/**
+*配网模式下，loop在这里执行
+*/
+int loop_callback (){
+  
+//  static int lastms = millis();
+//  if (millis()-lastms > 3000) {
+//    lastms = millis();
+//    Serial.printf(PSTR("配网模式 version %s for %d Free mem=%d\n"),version.c_str(), lastms/1000, ESP.getFreeHeap());
+//  }
+
+  #if(defined(YYXBC_WITH_433))
+   if (mySwitch.available()) {
+
+      uint16_t bit = mySwitch.getReceivedBitlength();
+      uint16_t protocol = mySwitch.getReceivedProtocol();
+      long unsigned switchKey = mySwitch.getReceivedValue();
+      Serial.printf("Received :%u,bit %u,Protocol %u \r\n",switchKey,bit,protocol);
+  
+      if(bit > 0 ){
+        if(findRawData( bit, protocol,switchKey )){
+          mySwitchHandler();
+        }else{
+          addRawData( bit, protocol,switchKey);
+          saveConfig(&MYFS);
+        }
+      }
+
+      //LED灯常亮5秒
+      digitalWrite(LED_BUILTIN_KED, HIGH);
+      delay(5000);
+      digitalWrite(LED_BUILTIN_KED, LOW);
+
+      mySwitch.resetAvailable();
+    }
+  #endif  
+  
+  return 0;
+}
+
+//自锁模式按钮，监听433按钮状态，执行相应处理
+bool mySwitchHandler()
+{
+  static long lastphysicsms = 0;
+  if (millis()-lastphysicsms > 800) {
+      bool is_led = digitalRead(LED_BUILTIN_LIGHT);
+      digitalWrite(LED_BUILTIN_LIGHT, !is_led);
+      if (is_led == YYXBC_HIGH)
+      {
+        button1_callback(BLINKER_CMD_OFF);
+        Serial.println("按钮对灯已执行关闭");
+      }
+      else
+      {
+        button1_callback(BLINKER_CMD_ON);
+        Serial.println("按钮对灯已执行打开");
+      }
+      is_led = digitalRead(LED_BUILTIN_LIGHT);  //更新按钮状态
+      lastphysicsms = millis();
+      
+      return true;
+  }
+
  return false;
 }
