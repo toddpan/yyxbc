@@ -6,11 +6,6 @@ v1.0
 Created 2021
 by 阳阳学编程
 www.sooncore.com
-抖音号：yyxbc2010
-微信号：yyxbc2010
-
-固件有网页配网功能，固件烧写工具：
-链接:https://pan.baidu.com/s/1WsE_2gERyjaUZFbwgJnsOw 提取码:56r8 
 
 说明：
 
@@ -75,7 +70,6 @@ This example code is in the public domain.
 #include <IRutils.h>
 #include <LittleFS.h>
 #include <FS.h>
-#include <RCSwitch.h>    //射频模块控制库 从IDE的库管理中直接下载
 
 char auth[] = "c3329a614cbd";
 char ssid[] = "panzujiMi10";
@@ -174,7 +168,7 @@ const uint16_t kMinUnknownSize = 12;
 
 // Use turn on the save buffer feature for more complete capture coverage.
 IRrecv irrecv(kRecvPin, kCaptureBufferSize, kTimeout, true);
-RCSwitch mySwitch = RCSwitch();
+
 // 新建组件对象
 #define BlinkerButton_Callback_Def(index,name)             \
   BlinkerButton Button##index(name);         \
@@ -415,7 +409,7 @@ void buttonx_callback( const uint16_t index, const String & state) {
     BLINKER_LOG("index： ", index);
 
 
-    else if (state == BLINKER_CMD_BUTTON_PRESSED){
+    if (state == BLINKER_CMD_BUTTON_PRESSED){
         BLINKER_LOG("Button pressed!");
         lastpresstime.set(index ,millis());
     }
@@ -1067,34 +1061,4 @@ void dataStorage(const uint16_t& bits){
     }
      sourceCode.add(usecs);
   }
-}
-
-
-
-
-void button_SW_callback(const String & state)   //发射数据按键通过自定承载内容发送信号值
-{
-        BLINKER_LOG("get button state: ", state);
-          mySwitch.send(state.toInt(), 24);
-          delay(1000); 
-}
-
-void button_Read_callback(const String & state){
-    if (state == BLINKER_CMD_ON) {
-        BLINKER_LOG("Toggle on!");
-  
-        stu = 1;
-    }
-    else if (state == BLINKER_CMD_OFF) {
-        BLINKER_LOG("Toggle off!");
-      
-        stu = 0;
-    }
-    Serial.print(stu);
-
-      // String c=get_code(3000);
-      //   mySwitch.send(c.toInt(), 24);
-      //   BLINKER_LOG("发射数据:", c);
-      //   Blinker.print("发射数据:", c);
-  
 }
