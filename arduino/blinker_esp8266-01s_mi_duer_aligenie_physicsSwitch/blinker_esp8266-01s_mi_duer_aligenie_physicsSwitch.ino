@@ -49,7 +49,7 @@ This example code is in the public domain.
 //#define BLINKER_ESP_SMARTCONFIG
 
 //支持阳阳学编程的web wifi配网，暂时不开源
-#define YYXBC_WEBCONFIG
+//#define YYXBC_WEBCONFIG
 
 
 //支持433自锁开关功能，需要用蜂鸟无线公司出的远-R1 433模块，
